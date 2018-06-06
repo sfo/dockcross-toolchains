@@ -1,4 +1,4 @@
-FROM dockcross/windows-x64:latest
+FROM ksfo/dockcross:win64_shared
 
 MAINTAINER Stanley Förster <stanley.foerster@gmail.com>
 
