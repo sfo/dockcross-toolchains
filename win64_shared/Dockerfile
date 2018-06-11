@@ -4,6 +4,12 @@ FROM dockcross/base:latest
 
 MAINTAINER Stanley Förster <stanley.foerster@gmail.com>
 
+ARG http_proxy
+ARG https_proxy
+
+ENV HTTP_PROXY=$http_proxy
+ENV HTTPS_PROXY=$https_proxy
+
 # WINE is used as an emulator for try_run and tests with CMake.
 # Other dependencies are from the listed MXE requirements:
 #   http://mxe.cc/#requirements
@@ -89,3 +95,6 @@ LABEL org.label-schema.build-date=$BUILD_DATE \
       org.label-schema.vcs-ref=$VCS_REF \
       org.label-schema.vcs-url=$VCS_URL \
       org.label-schema.schema-version="1.0"
+
+ENV HTTP_PROXY=""
+ENV HTTPS_PROXY=""

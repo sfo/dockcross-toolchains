@@ -3,4 +3,4 @@ LOCAL_PKG_LIST := gcc
 .DEFAULT local-pkg-list:
 local-pkg-list: $(LOCAL_PKG_LIST)
 
-JOBS := 4
+JOBS := 8
