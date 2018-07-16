@@ -2,71 +2,125 @@
 
 FROM dockcross/base:latest
 
-MAINTAINER Stanley Förster <stanley.foerster@gmail.com>
+ENV WINEARCH win64
+ARG MXE_TARGET_ARCH=x86_64
+ARG MXE_TARGET_THREAD=
+ARG MXE_TARGET_LINK=shared
 
-ARG http_proxy
-ARG https_proxy
+#
+# Before including this script, make sure to set:
+#
+# WINEARCH environment variable to either "win64" or "win32"
+# MXE_TARGET_ARCH argument to either "x86_64" or "i686". See http://mxe.cc/
+# MXE_TARGET_THREAD argument to either "" or ".posix". Default is win32. See http://mxe.cc/
+# MXE_TARGET_LINK argument to either "static" or "shared"
+#
+# For example:
+#
+#  ENV WINEARCH win64
+#  ARG MXE_TARGET_ARCH=x86_64
+#  ARG MXE_TARGET_THREAD=
+#  ARG MXE_TARGET_LINK=shared
+#
 
-ENV HTTP_PROXY=$http_proxy
-ENV HTTPS_PROXY=$https_proxy
+# mxe master 2017-10-25
+ARG MXE_GIT_TAG=994ad47302e8811614b7eb49fc05234942b95b89
 
+ENV CMAKE_TOOLCHAIN_FILE /usr/src/mxe/usr/${MXE_TARGET_ARCH}-w64-mingw32.${MXE_TARGET_LINK}${MXE_TARGET_THREAD}/share/cmake/mxe-conf.cmake
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+#
 # WINE is used as an emulator for try_run and tests with CMake.
+#
 # Other dependencies are from the listed MXE requirements:
 #   http://mxe.cc/#requirements
 # 'cmake' is omitted because it is installed from source in the base image
-RUN apt-get update && apt-get -y install \
-  autoconf \
-  automake \
-  autopoint \
-  bash \
-  bison \
-  bzip2 \
-  flex \
-  gettext \
-  git \
-  g++ \
-  g++-multilib \
-  gperf \
-  intltool \
-  libffi-dev \
-  libgdk-pixbuf2.0-dev \
-  libtool-bin \
-  libltdl-dev \
-  libssl-dev \
-  libxml-parser-perl \
-  libc6-dev-i386 \
-  make \
-  openssl \
-  p7zip-full \
-  patch \
-  perl \
-  pkg-config \
-  python \
-  ruby \
-  scons \
-  sed \
-  unzip \
-  wget \
-  wine \
-  xz-utils
-# Set up wine
-RUN dpkg --add-architecture i386 && \
+#
+RUN \
   apt-get update && \
-  apt-get install -y wine32
-ENV WINEARCH win64
-RUN wine hostname
-
-WORKDIR /usr/src
-# mxe master 2017-10-25
-RUN git clone https://github.com/mxe/mxe.git && \
+  apt-get install --no-install-recommends --yes \
+    autoconf \
+    automake \
+    autopoint \
+    bash \
+    bison \
+    bzip2 \
+    flex \
+    gettext \
+    git \
+    g++ \
+    g++-multilib \
+    gperf \
+    intltool \
+    libffi-dev \
+    libgdk-pixbuf2.0-dev \
+    libtool-bin \
+    libltdl-dev \
+    libssl-dev \
+    libxml-parser-perl \
+    libc6-dev-i386 \
+    make \
+    openssl \
+    p7zip-full \
+    patch \
+    perl \
+    pkg-config \
+    python \
+    ruby \
+    scons \
+    sed \
+    unzip \
+    wget \
+    wine \
+    xz-utils \
+  && \
+  #
+  # Install Wine
+  #
+  dpkg --add-architecture i386 && \
+  apt-get update && \
+  apt-get install -y wine32 && \
+  wine hostname && \
+  #
+  # Download MXE sources
+  #
+  cd /usr/src && \
+  git clone https://github.com/mxe/mxe.git && \
   cd mxe && \
-  git checkout 994ad47302e8811614b7eb49fc05234942b95b89
-WORKDIR /usr/src/mxe
-COPY settings.mk /usr/src/mxe/
-RUN make -j$(nproc)
+  git checkout ${MXE_GIT_TAG} && \
+  #
+  # Configure "settings.mk" required to build MXE
+  #
+  cd /usr/src/mxe && \
+  echo "MXE_TARGETS := ${MXE_TARGET_ARCH}-w64-mingw32.${MXE_TARGET_LINK}${MXE_TARGET_THREAD}" > settings.mk && \
+  echo "LOCAL_PKG_LIST := gcc"                                                   >> settings.mk && \
+  echo ".DEFAULT local-pkg-list:"                                                >> settings.mk && \
+  echo "local-pkg-list: \$(LOCAL_PKG_LIST)"                                      >> settings.mk && \
+  #
+  # Build MXE
+  #
+  cd /usr/src/mxe && \
+  make -j$(nproc) && \
+  #
+  # Cleanup: By keeping the MXE build system (Makefile, ...), derived images will be able to install
+  #          additional packages.
+  #
+  rm -rf .git log pkg && \
+  #
+  # Update MXE toolchain file
+  #
+  echo 'set(CMAKE_CROSSCOMPILING_EMULATOR "/usr/bin/wine")' >> ${CMAKE_TOOLCHAIN_FILE} && \
+  #
+  # Replace cmake and cpack binaries
+  #
+  cd /usr/bin && \
+  rm cmake cpack && \
+  ln -s /usr/src/mxe/usr/bin/${MXE_TARGET_ARCH}-w64-mingw32.${MXE_TARGET_LINK}${MXE_TARGET_THREAD}-cmake cmake && \
+  ln -s /usr/src/mxe/usr/bin/${MXE_TARGET_ARCH}-w64-mingw32.${MXE_TARGET_LINK}${MXE_TARGET_THREAD}-cpack cpack
 
 ENV PATH ${PATH}:/usr/src/mxe/usr/bin
-ENV CROSS_TRIPLE x86_64-w64-mingw32.shared
+ENV CROSS_TRIPLE ${MXE_TARGET_ARCH}-w64-mingw32.${MXE_TARGET_LINK}${MXE_TARGET_THREAD}
 ENV AS=/usr/src/mxe/usr/bin/${CROSS_TRIPLE}-as \
     AR=/usr/src/mxe/usr/bin/${CROSS_TRIPLE}-ar \
     CC=/usr/src/mxe/usr/bin/${CROSS_TRIPLE}-gcc \
@@ -75,15 +129,9 @@ ENV AS=/usr/src/mxe/usr/bin/${CROSS_TRIPLE}-as \
     LD=/usr/src/mxe/usr/bin/${CROSS_TRIPLE}-ld \
     FC=/usr/src/mxe/usr/bin/${CROSS_TRIPLE}-gfortran
 
-ENV DEFAULT_DOCKCROSS_IMAGE ksfo/dockcross:win64_shared
 WORKDIR /work
 
-ENV CMAKE_TOOLCHAIN_FILE /usr/src/mxe/usr/${CROSS_TRIPLE}/share/cmake/mxe-conf.cmake
-RUN echo 'set(CMAKE_CROSSCOMPILING_EMULATOR "/usr/bin/wine")' >> ${CMAKE_TOOLCHAIN_FILE}
-RUN cd /usr/local/bin \
-  && rm cmake \
-  && ln -s /usr/src/mxe/usr/bin/${CROSS_TRIPLE}-cmake cmake \
-  && ln -s /usr/src/mxe/usr/bin/${CROSS_TRIPLE}-cpack cpack
+ENV DEFAULT_DOCKCROSS_IMAGE dockcross/windows-x64
 
 # Build-time metadata as defined at http://label-schema.org
 ARG BUILD_DATE
@@ -95,6 +143,3 @@ LABEL org.label-schema.build-date=$BUILD_DATE \
       org.label-schema.vcs-ref=$VCS_REF \
       org.label-schema.vcs-url=$VCS_URL \
       org.label-schema.schema-version="1.0"
-
-ENV HTTP_PROXY=""
-ENV HTTPS_PROXY=""
