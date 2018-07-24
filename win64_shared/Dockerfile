@@ -81,7 +81,9 @@ RUN \
   dpkg --add-architecture i386 && \
   apt-get update && \
   apt-get install -y wine32 && \
-  wine hostname && \
+  wine hostname
+
+RUN \
   #
   # Download MXE sources
   #
@@ -106,11 +108,13 @@ RUN \
   # Cleanup: By keeping the MXE build system (Makefile, ...), derived images will be able to install
   #          additional packages.
   #
-  rm -rf .git log pkg && \
+  rm -rf log pkg && \
   #
   # Update MXE toolchain file
   #
-  echo 'set(CMAKE_CROSSCOMPILING_EMULATOR "/usr/bin/wine")' >> ${CMAKE_TOOLCHAIN_FILE} && \
+  echo 'set(CMAKE_CROSSCOMPILING_EMULATOR "/usr/bin/wine")' >> ${CMAKE_TOOLCHAIN_FILE}
+
+RUN \
   #
   # Replace cmake and cpack binaries
   #
@@ -131,7 +135,7 @@ ENV AS=/usr/src/mxe/usr/bin/${CROSS_TRIPLE}-as \
 
 WORKDIR /work
 
-ENV DEFAULT_DOCKCROSS_IMAGE dockcross/windows-x64
+ENV DEFAULT_DOCKCROSS_IMAGE ksfo/dockcross:win64_shared
 
 # Build-time metadata as defined at http://label-schema.org
 ARG BUILD_DATE
