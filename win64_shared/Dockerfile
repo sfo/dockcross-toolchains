@@ -1,149 +1,101 @@
-## modified original Dockerfile at https://github.com/dockcross/dockcross/blob/master/windows-x64/Dockerfile
+FROM debian:jessie-20181112
+MAINTAINER Matt McCormick "matt.mccormick@kitware.com"
 
-FROM dockcross/base:latest
-
-ENV WINEARCH win64
-ARG MXE_TARGET_ARCH=x86_64
-ARG MXE_TARGET_THREAD=
-ARG MXE_TARGET_LINK=shared
-
-#
-# Before including this script, make sure to set:
-#
-# WINEARCH environment variable to either "win64" or "win32"
-# MXE_TARGET_ARCH argument to either "x86_64" or "i686". See http://mxe.cc/
-# MXE_TARGET_THREAD argument to either "" or ".posix". Default is win32. See http://mxe.cc/
-# MXE_TARGET_LINK argument to either "static" or "shared"
-#
-# For example:
-#
-#  ENV WINEARCH win64
-#  ARG MXE_TARGET_ARCH=x86_64
-#  ARG MXE_TARGET_THREAD=
-#  ARG MXE_TARGET_LINK=shared
-#
-
-# mxe master 2017-10-25
-ARG MXE_GIT_TAG=994ad47302e8811614b7eb49fc05234942b95b89
-
-ENV CMAKE_TOOLCHAIN_FILE /usr/src/mxe/usr/${MXE_TARGET_ARCH}-w64-mingw32.${MXE_TARGET_LINK}${MXE_TARGET_THREAD}/share/cmake/mxe-conf.cmake
+#include "common.debian"
+# Image build scripts
+COPY imagefiles/install-gosu-binary.sh /buildscripts/
 
 ARG DEBIAN_FRONTEND=noninteractive
+ARG REPO=http://cdn-fastly.deb.debian.org
 
-#
-# WINE is used as an emulator for try_run and tests with CMake.
-#
-# Other dependencies are from the listed MXE requirements:
-#   http://mxe.cc/#requirements
-# 'cmake' is omitted because it is installed from source in the base image
-#
 RUN \
-  apt-get update && \
+  bash -c "echo \"deb $REPO/debian jessie main contrib non-free\" > /etc/apt/sources.list"  && \
+  bash -c "echo \"deb $REPO/debian jessie-updates main contrib non-free\" >> /etc/apt/sources.list"  && \
+  bash -c "echo \"deb $REPO/debian-security jessie/updates main\" >> /etc/apt/sources.list" && \
+  bash -c "echo \"deb http://ftp.debian.org/debian jessie-backports main\" >> /etc/apt/sources.list" && \
+  apt-get update --yes && \
   apt-get install --no-install-recommends --yes \
-    autoconf \
     automake \
-    autopoint \
+    autogen \
     bash \
-    bison \
+    build-essential \
+    bc \
     bzip2 \
-    flex \
+    ca-certificates \
+    curl \
+    file \
     gettext \
-    git \
-    g++ \
-    g++-multilib \
-    gperf \
-    intltool \
-    libffi-dev \
-    libgdk-pixbuf2.0-dev \
-    libtool-bin \
-    libltdl-dev \
-    libssl-dev \
-    libxml-parser-perl \
-    libc6-dev-i386 \
+    gzip \
+    zip \
     make \
-    openssl \
-    p7zip-full \
-    patch \
-    perl \
+    ncurses-dev \
     pkg-config \
+    libtool \
     python \
-    ruby \
-    scons \
+    python-pip \
+    rsync \
     sed \
-    unzip \
+    ssh \
+    bison \
+    flex \
+    tar \
+    pax \
+    vim \
     wget \
-    wine \
     xz-utils \
+    zlib1g-dev \
   && \
-  #
-  # Install Wine
-  #
-  dpkg --add-architecture i386 && \
-  apt-get update && \
-  apt-get install -y wine32 && \
-  wine hostname
+  apt-get clean --yes && \
+  /buildscripts/install-gosu-binary.sh && \
+  rm -rf /buildscripts
+
+#include "common.docker"
+WORKDIR /usr/src
+
+ARG GIT_VERSION=2.20.1
+ARG CMAKE_VERSION=3.13.2
+
+# Image build scripts
+COPY \
+  imagefiles/build-and-install-cmake.sh \
+  imagefiles/build-and-install-curl.sh \
+  imagefiles/build-and-install-git.sh \
+  imagefiles/build-and-install-ninja.sh \
+  imagefiles/build-and-install-openssl.sh \
+  imagefiles/build-and-install-openssh.sh \
+  imagefiles/install-cmake-binary.sh \
+  imagefiles/install-liquidprompt-binary.sh \
+  imagefiles/install-python-packages.sh \
+  imagefiles/utils.sh \
+  /buildscripts/
 
 RUN \
-  #
-  # Download MXE sources
-  #
-  cd /usr/src && \
-  git clone https://github.com/mxe/mxe.git && \
-  cd mxe && \
-  git checkout ${MXE_GIT_TAG} && \
-  #
-  # Configure "settings.mk" required to build MXE
-  #
-  cd /usr/src/mxe && \
-  echo "MXE_TARGETS := ${MXE_TARGET_ARCH}-w64-mingw32.${MXE_TARGET_LINK}${MXE_TARGET_THREAD}" > settings.mk && \
-  echo "LOCAL_PKG_LIST := gcc"                                                   >> settings.mk && \
-  echo ".DEFAULT local-pkg-list:"                                                >> settings.mk && \
-  echo "local-pkg-list: \$(LOCAL_PKG_LIST)"                                      >> settings.mk && \
-  #
-  # Build MXE
-  #
-  cd /usr/src/mxe && \
-  make -j$(nproc) && \
-  #
-  # Cleanup: By keeping the MXE build system (Makefile, ...), derived images will be able to install
-  #          additional packages.
-  #
-  rm -rf log pkg && \
-  #
-  # Update MXE toolchain file
-  #
-  echo 'set(CMAKE_CROSSCOMPILING_EMULATOR "/usr/bin/wine")' >> ${CMAKE_TOOLCHAIN_FILE}
+  X86_FLAG=$([ "$DEFAULT_DOCKCROSS_IMAGE" = "dockcross/manylinux-x86" ] && echo "-32" || echo "") && \
+  /buildscripts/build-and-install-openssl.sh $X86_FLAG && \
+  /buildscripts/build-and-install-openssh.sh && \
+  /buildscripts/build-and-install-curl.sh && \
+  /buildscripts/build-and-install-git.sh && \
+  /buildscripts/install-cmake-binary.sh $X86_FLAG && \
+  /buildscripts/install-liquidprompt-binary.sh && \
+  PYTHON=$([ -e /opt/python/cp35-cp35m/bin/python ] && echo "/opt/python/cp35-cp35m/bin/python" || echo "python") && \
+  /buildscripts/install-python-packages.sh -python ${PYTHON} && \
+  /buildscripts/build-and-install-ninja.sh -python ${PYTHON} && \
+  rm -rf /buildscripts
 
-RUN \
-  #
-  # Replace cmake and cpack binaries
-  #
-  cd /usr/bin && \
-  rm cmake cpack && \
-  ln -s /usr/src/mxe/usr/bin/${MXE_TARGET_ARCH}-w64-mingw32.${MXE_TARGET_LINK}${MXE_TARGET_THREAD}-cmake cmake && \
-  ln -s /usr/src/mxe/usr/bin/${MXE_TARGET_ARCH}-w64-mingw32.${MXE_TARGET_LINK}${MXE_TARGET_THREAD}-cpack cpack
-
-ENV PATH ${PATH}:/usr/src/mxe/usr/bin
-ENV CROSS_TRIPLE ${MXE_TARGET_ARCH}-w64-mingw32.${MXE_TARGET_LINK}${MXE_TARGET_THREAD}
-ENV AS=/usr/src/mxe/usr/bin/${CROSS_TRIPLE}-as \
-    AR=/usr/src/mxe/usr/bin/${CROSS_TRIPLE}-ar \
-    CC=/usr/src/mxe/usr/bin/${CROSS_TRIPLE}-gcc \
-    CPP=/usr/src/mxe/usr/bin/${CROSS_TRIPLE}-cpp \
-    CXX=/usr/src/mxe/usr/bin/${CROSS_TRIPLE}-g++ \
-    LD=/usr/src/mxe/usr/bin/${CROSS_TRIPLE}-ld \
-    FC=/usr/src/mxe/usr/bin/${CROSS_TRIPLE}-gfortran
-
+RUN echo "root:root" | chpasswd
 WORKDIR /work
+ENTRYPOINT ["/dockcross/entrypoint.sh"]
 
-ENV DEFAULT_DOCKCROSS_IMAGE ksfo/dockcross:win64_shared
+# Runtime scripts
+COPY imagefiles/cmake.sh /usr/local/bin/cmake
+COPY imagefiles/ccmake.sh /usr/local/bin/ccmake
+COPY imagefiles/entrypoint.sh imagefiles/dockcross /dockcross/
 
 # Build-time metadata as defined at http://label-schema.org
-ARG BUILD_DATE
+# Note: To avoid systematic rebuild of dependent images, only
+#       name and vcs-url are included.
 ARG IMAGE
-ARG VCS_REF
 ARG VCS_URL
-LABEL org.label-schema.build-date=$BUILD_DATE \
-      org.label-schema.name=$IMAGE \
-      org.label-schema.vcs-ref=$VCS_REF \
+LABEL org.label-schema.name=$IMAGE \
       org.label-schema.vcs-url=$VCS_URL \
       org.label-schema.schema-version="1.0"
