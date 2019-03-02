@@ -1,4 +1,4 @@
-FROM ksfo/dockcross:win64_shared
+FROM ksfo/dockcross:win64-shared
 
 COPY settings.mk /usr/src/mxe/settings.mk
 
