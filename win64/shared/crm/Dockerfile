@@ -1,4 +1,4 @@
-FROM dockcross/windows-shared-64
+FROM dockcross/windows-shared-x64:latest
 
 RUN apt-get update \
  && apt-get -y install dos2unix \
