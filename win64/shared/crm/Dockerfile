@@ -1,4 +1,4 @@
-FROM ksfo/dockcross:win64-shared
+FROM dockcross/windows-shared-64
 
 RUN apt-get update \
  && apt-get -y install dos2unix \
